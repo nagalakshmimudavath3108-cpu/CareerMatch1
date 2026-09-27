@@ -39,7 +39,10 @@ const connectDB = async () => {
     connectTimeoutMS: 10000,
     socketTimeoutMS: 45000,
     maxPoolSize: 10,
+    family: 4,
+    retryWrites: true,
   };
+
 
   const tryConnect = async (uriToTry) => {
     return await mongoose.connect(uriToTry, connectionOptions);
