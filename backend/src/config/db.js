@@ -69,21 +69,36 @@ mongoose.connection.on('disconnected', () => {
   console.warn('⚠️ Mongoose connection disconnected');
 });
 
-// Middleware to prevent buffering timeouts if database connection is unavailable
-const checkDbConnection = (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
-    // Attempt background reconnect if disconnected
+// Helper to wait for database connection during cold-start or pending connection states
+const waitForDbConnection = async (timeoutMs = 5000) => {
+  const startTime = Date.now();
+  while (mongoose.connection.readyState !== 1) {
     if (mongoose.connection.readyState === 0) {
       connectDB().catch((err) => console.error('On-demand connection trigger failed:', err.message));
     }
-    return res.status(503).json({
-      success: false,
-      message: 'Database connection unavailable. Ensure MONGODB_URI is set in Render Environment Variables and MongoDB Atlas IP Network Access allows 0.0.0.0/0.',
-      readyState: mongoose.connection.readyState,
-    });
+    if (Date.now() - startTime >= timeoutMs) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return true;
+};
+
+// Middleware to prevent buffering timeouts if database connection is unavailable
+const checkDbConnection = async (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    const isConnected = await waitForDbConnection(5000);
+    if (!isConnected) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection unavailable. Ensure MONGODB_URI is set in Render Environment Variables and MongoDB Atlas IP Network Access allows 0.0.0.0/0.',
+        readyState: mongoose.connection.readyState,
+      });
+    }
   }
   next();
 };
 
-module.exports = { connectDB, checkDbConnection };
+module.exports = { connectDB, checkDbConnection, waitForDbConnection };
+
 
