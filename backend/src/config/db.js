@@ -22,9 +22,9 @@ const connectDB = async () => {
   }
 
   isConnecting = true;
-  const mongoUri = process.env.MONGODB_URI;
+  const rawUri = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
 
-  if (!mongoUri) {
+  if (!rawUri) {
     if (process.env.NODE_ENV === 'production') {
       console.error('❌ FATAL ERROR: MONGODB_URI environment variable is missing in Render environment settings!');
       lastDbError = 'MONGODB_URI environment variable is missing in Render environment settings';
@@ -33,27 +33,41 @@ const connectDB = async () => {
     }
   }
 
-  let targetUri = mongoUri || 'mongodb://127.0.0.1:27017/careermatch';
-  if (targetUri.startsWith('mongodb+srv://') && !targetUri.includes('authSource=')) {
-    const sep = targetUri.includes('?') ? '&' : '?';
-    targetUri = `${targetUri}${sep}authSource=admin`;
-  }
+  const baseUri = rawUri || 'mongodb://127.0.0.1:27017/careermatch';
+  const connectionOptions = {
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+  };
+
+  const tryConnect = async (uriToTry) => {
+    return await mongoose.connect(uriToTry, connectionOptions);
+  };
 
   try {
-    const conn = await mongoose.connect(targetUri, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-    });
-
-
-
+    const conn = await tryConnect(baseUri);
     console.log(`✅ MongoDB Connected: ${conn.connection.host} (Database: ${conn.connection.name})`);
     isConnecting = false;
     lastDbError = null;
     return conn;
   } catch (error) {
+    // If auth failed and authSource wasn't explicitly provided, retry with authSource=admin fallback
+    if (error.message.includes('Authentication failed') && baseUri.startsWith('mongodb+srv://') && !baseUri.includes('authSource=')) {
+      try {
+        console.log('🔄 Primary auth attempt failed; retrying connection with authSource=admin...');
+        const sep = baseUri.includes('?') ? '&' : '?';
+        const fallbackUri = `${baseUri}${sep}authSource=admin`;
+        const conn = await tryConnect(fallbackUri);
+        console.log(`✅ MongoDB Connected via fallback: ${conn.connection.host} (Database: ${conn.connection.name})`);
+        isConnecting = false;
+        lastDbError = null;
+        return conn;
+      } catch (fallbackError) {
+        error = fallbackError;
+      }
+    }
+
     isConnecting = false;
     lastDbError = error.message;
     console.error(`❌ MongoDB Connection Error: ${error.message}`);
@@ -66,6 +80,7 @@ const connectDB = async () => {
     }, 5000);
     throw error;
   }
+
 };
 
 // Lifecycle connection listeners
