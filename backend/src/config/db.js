@@ -41,7 +41,9 @@ const connectDB = async () => {
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
+      authSource: 'admin',
     });
+
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host} (Database: ${conn.connection.name})`);
     isConnecting = false;
