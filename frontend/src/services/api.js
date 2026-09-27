@@ -1,8 +1,11 @@
 import axios from 'axios';
 
 const getBaseURL = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  return '/api';
+  let url = import.meta.env.VITE_API_URL || '/api';
+  if (url && url !== '/api' && !url.endsWith('/api') && !url.endsWith('/api/')) {
+    url = `${url.replace(/\/+$/, '')}/api`;
+  }
+  return url;
 };
 
 const api = axios.create({
