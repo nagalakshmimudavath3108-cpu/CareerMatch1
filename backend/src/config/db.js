@@ -6,6 +6,34 @@ if (process.env.NODE_ENV === 'production') {
   mongoose.set('autoIndex', false);
 }
 
+const sanitizeMongoUri = (uri) => {
+  if (!uri) return '';
+  let str = uri.trim().replace(/^["']|["']$/g, '');
+  if (!str.startsWith('mongodb://') && !str.startsWith('mongodb+srv://')) {
+    return str;
+  }
+  const schemeMatch = str.match(/^(mongodb(?:\+srv)?:\/\/)(.*)$/);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1];
+    const rest = schemeMatch[2];
+    const lastAtIdx = rest.lastIndexOf('@');
+    if (lastAtIdx !== -1) {
+      const userInfo = rest.substring(0, lastAtIdx);
+      const hostAndQuery = rest.substring(lastAtIdx + 1);
+      const firstColonIdx = userInfo.indexOf(':');
+      if (firstColonIdx !== -1) {
+        const username = userInfo.substring(0, firstColonIdx);
+        let password = userInfo.substring(firstColonIdx + 1);
+        if (password.includes('@') && !password.includes('%40')) password = password.replace(/@/g, '%40');
+        if (password.includes('#') && !password.includes('%23')) password = password.replace(/#/g, '%23');
+        if (password.includes('$') && !password.includes('%24')) password = password.replace(/\$/g, '%24');
+        return `${scheme}${username}:${password}@${hostAndQuery}`;
+      }
+    }
+  }
+  return str;
+};
+
 let isConnecting = false;
 let lastDbError = null;
 
@@ -22,7 +50,7 @@ const connectDB = async () => {
   }
 
   isConnecting = true;
-  const rawUri = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
+  const rawUri = sanitizeMongoUri(process.env.MONGODB_URI || '');
 
   if (!rawUri) {
     if (process.env.NODE_ENV === 'production') {
@@ -44,6 +72,7 @@ const connectDB = async () => {
   const tryConnect = async (uriToTry) => {
     return await mongoose.connect(uriToTry, connectionOptions);
   };
+
 
   try {
     const conn = await tryConnect(baseUri);
