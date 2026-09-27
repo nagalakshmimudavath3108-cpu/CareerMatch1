@@ -7,6 +7,9 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 let isConnecting = false;
+let lastDbError = null;
+
+const getLastDbError = () => lastDbError;
 
 const connectDB = async () => {
   if (mongoose.connection.readyState === 1) {
@@ -24,6 +27,7 @@ const connectDB = async () => {
   if (!mongoUri) {
     if (process.env.NODE_ENV === 'production') {
       console.error('❌ FATAL ERROR: MONGODB_URI environment variable is missing in Render environment settings!');
+      lastDbError = 'MONGODB_URI environment variable is missing in Render environment settings';
     } else {
       console.warn('⚠️ MONGODB_URI not found in environment, falling back to local MongoDB mongodb://127.0.0.1:27017/careermatch');
     }
@@ -41,9 +45,11 @@ const connectDB = async () => {
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host} (Database: ${conn.connection.name})`);
     isConnecting = false;
+    lastDbError = null;
     return conn;
   } catch (error) {
     isConnecting = false;
+    lastDbError = error.message;
     console.error(`❌ MongoDB Connection Error: ${error.message}`);
     // Schedule background retry after 5s if disconnected
     setTimeout(() => {
@@ -59,10 +65,12 @@ const connectDB = async () => {
 // Lifecycle connection listeners
 mongoose.connection.on('connected', () => {
   console.log('💚 Mongoose connection established to MongoDB Atlas/Database');
+  lastDbError = null;
 });
 
 mongoose.connection.on('error', (err) => {
   console.error(`🔴 Mongoose connection error: ${err.message}`);
+  lastDbError = err.message;
 });
 
 mongoose.connection.on('disconnected', () => {
@@ -70,7 +78,7 @@ mongoose.connection.on('disconnected', () => {
 });
 
 // Helper to wait for database connection during cold-start or pending connection states
-const waitForDbConnection = async (timeoutMs = 5000) => {
+const waitForDbConnection = async (timeoutMs = 12000) => {
   const startTime = Date.now();
   while (mongoose.connection.readyState !== 1) {
     if (mongoose.connection.readyState === 0) {
@@ -87,18 +95,20 @@ const waitForDbConnection = async (timeoutMs = 5000) => {
 // Middleware to prevent buffering timeouts if database connection is unavailable
 const checkDbConnection = async (req, res, next) => {
   if (mongoose.connection.readyState !== 1) {
-    const isConnected = await waitForDbConnection(5000);
+    const isConnected = await waitForDbConnection(12000);
     if (!isConnected) {
       return res.status(503).json({
         success: false,
         message: 'Database connection unavailable. Ensure MONGODB_URI is set in Render Environment Variables and MongoDB Atlas IP Network Access allows 0.0.0.0/0.',
         readyState: mongoose.connection.readyState,
+        lastError: lastDbError || 'Connection attempt timed out after 12000ms',
       });
     }
   }
   next();
 };
 
-module.exports = { connectDB, checkDbConnection, waitForDbConnection };
+module.exports = { connectDB, checkDbConnection, waitForDbConnection, getLastDbError };
+
 
 
