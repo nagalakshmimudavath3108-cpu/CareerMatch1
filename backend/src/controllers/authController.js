@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const JobSeekerProfile = require('../models/JobSeekerProfile');
 const RecruiterProfile = require('../models/RecruiterProfile');
@@ -14,7 +15,8 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = String(email).toLowerCase().trim();
+    console.log(`🔑 Registration attempt for email: ${normalizedEmail} (DB Connection State: ${mongoose.connection.readyState})`);
 
     const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
@@ -22,7 +24,7 @@ const registerUser = async (req, res) => {
     }
 
     const user = await User.create({
-      name: name.trim(),
+      name: String(name).trim(),
       email: normalizedEmail,
       password,
       role: role || 'jobseeker',
@@ -51,7 +53,7 @@ const registerUser = async (req, res) => {
 
     const token = generateToken(user._id, user.role);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'User registered successfully',
       token,
@@ -64,8 +66,11 @@ const registerUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Registration Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Registration failed' });
+    console.error('Registration Error:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Registration failed on server',
+    });
   }
 };
 
@@ -80,7 +85,9 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = String(email).toLowerCase().trim();
+    console.log(`🔑 Login attempt for email: ${normalizedEmail} (DB Connection State: ${mongoose.connection.readyState})`);
+
     const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -104,6 +111,7 @@ const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error('Login Error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 };

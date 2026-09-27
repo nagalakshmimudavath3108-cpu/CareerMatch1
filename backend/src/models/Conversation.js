@@ -32,6 +32,8 @@ const conversationSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    bufferCommands: false,
+    autoIndex: false,
   }
 );
 

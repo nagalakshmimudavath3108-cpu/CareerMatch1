@@ -87,6 +87,8 @@ const jobSeekerProfileSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    bufferCommands: false,
+    autoIndex: false,
   }
 );
 

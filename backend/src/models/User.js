@@ -42,6 +42,8 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    bufferCommands: false, // Prevent schema-level query buffering timeouts
+    autoIndex: false,      // Prevent index creation locks on production startup
   }
 );
 

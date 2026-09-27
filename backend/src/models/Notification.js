@@ -35,6 +35,8 @@ const notificationSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    bufferCommands: false,
+    autoIndex: false,
   }
 );
 

@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const mongoose = require('mongoose');
 const { notFound, errorHandler } = require('./middleware/error');
+const { checkDbConnection } = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
@@ -27,10 +29,21 @@ app.use(express.urlencoded({ extended: true }));
 // Static uploads folder
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Root health check route
+// Root health check route providing database status telemetry
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'CareerMatch Platform API is running smoothly', time: new Date() });
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.json({
+    status: isDbConnected ? 'ok' : 'degraded',
+    dbConnected: isDbConnected,
+    dbState: mongoose.connection.readyState, // 0: disconnected, 1: connected, 2: connecting, 3: disconnecting
+    dbHost: mongoose.connection.host || 'none',
+    message: isDbConnected ? 'CareerMatch Platform API is fully operational' : 'Database disconnected',
+    time: new Date(),
+  });
 });
+
+// Apply database connection check to all API endpoints to prevent 10s buffering timeouts
+app.use('/api', checkDbConnection);
 
 // API Routes
 app.use('/api/auth', authRoutes);
