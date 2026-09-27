@@ -33,7 +33,11 @@ const connectDB = async () => {
     }
   }
 
-  const targetUri = mongoUri || 'mongodb://127.0.0.1:27017/careermatch';
+  let targetUri = mongoUri || 'mongodb://127.0.0.1:27017/careermatch';
+  if (targetUri.startsWith('mongodb+srv://') && !targetUri.includes('authSource=')) {
+    const sep = targetUri.includes('?') ? '&' : '?';
+    targetUri = `${targetUri}${sep}authSource=admin`;
+  }
 
   try {
     const conn = await mongoose.connect(targetUri, {
@@ -41,8 +45,8 @@ const connectDB = async () => {
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
-      authSource: 'admin',
     });
+
 
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host} (Database: ${conn.connection.name})`);
