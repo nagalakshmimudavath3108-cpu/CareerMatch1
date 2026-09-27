@@ -6,34 +6,6 @@ if (process.env.NODE_ENV === 'production') {
   mongoose.set('autoIndex', false);
 }
 
-const sanitizeMongoUri = (uri) => {
-  if (!uri) return '';
-  let str = uri.trim().replace(/^["']|["']$/g, '');
-  if (!str.startsWith('mongodb://') && !str.startsWith('mongodb+srv://')) {
-    return str;
-  }
-  const schemeMatch = str.match(/^(mongodb(?:\+srv)?:\/\/)(.*)$/);
-  if (schemeMatch) {
-    const scheme = schemeMatch[1];
-    const rest = schemeMatch[2];
-    const lastAtIdx = rest.lastIndexOf('@');
-    if (lastAtIdx !== -1) {
-      const userInfo = rest.substring(0, lastAtIdx);
-      const hostAndQuery = rest.substring(lastAtIdx + 1);
-      const firstColonIdx = userInfo.indexOf(':');
-      if (firstColonIdx !== -1) {
-        const username = userInfo.substring(0, firstColonIdx);
-        let password = userInfo.substring(firstColonIdx + 1);
-        if (password.includes('@') && !password.includes('%40')) password = password.replace(/@/g, '%40');
-        if (password.includes('#') && !password.includes('%23')) password = password.replace(/#/g, '%23');
-        if (password.includes('$') && !password.includes('%24')) password = password.replace(/\$/g, '%24');
-        return `${scheme}${username}:${password}@${hostAndQuery}`;
-      }
-    }
-  }
-  return str;
-};
-
 let isConnecting = false;
 let lastDbError = null;
 
@@ -50,9 +22,9 @@ const connectDB = async () => {
   }
 
   isConnecting = true;
-  const rawUri = sanitizeMongoUri(process.env.MONGODB_URI || '');
+  const mongoUri = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
 
-  if (!rawUri) {
+  if (!mongoUri) {
     if (process.env.NODE_ENV === 'production') {
       console.error('❌ FATAL ERROR: MONGODB_URI environment variable is missing in Render environment settings!');
       lastDbError = 'MONGODB_URI environment variable is missing in Render environment settings';
@@ -61,7 +33,7 @@ const connectDB = async () => {
     }
   }
 
-  const baseUri = rawUri || 'mongodb://127.0.0.1:27017/careermatch';
+  const targetUri = mongoUri || 'mongodb://127.0.0.1:27017/careermatch';
   const connectionOptions = {
     serverSelectionTimeoutMS: 10000,
     connectTimeoutMS: 10000,
@@ -73,20 +45,19 @@ const connectDB = async () => {
     return await mongoose.connect(uriToTry, connectionOptions);
   };
 
-
   try {
-    const conn = await tryConnect(baseUri);
+    const conn = await tryConnect(targetUri);
     console.log(`✅ MongoDB Connected: ${conn.connection.host} (Database: ${conn.connection.name})`);
     isConnecting = false;
     lastDbError = null;
     return conn;
   } catch (error) {
-    if (error.message.includes('Authentication failed') && baseUri.startsWith('mongodb+srv://')) {
-      const sep = baseUri.includes('?') ? '&' : '?';
+    if (error.message.includes('Authentication failed') && targetUri.startsWith('mongodb+srv://')) {
+      const sep = targetUri.includes('?') ? '&' : '?';
       const fallbacks = [
-        !baseUri.includes('authSource=') ? `${baseUri}${sep}authSource=admin` : null,
-        !baseUri.includes('authMechanism=') ? `${baseUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-256` : null,
-        !baseUri.includes('authMechanism=') ? `${baseUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-1` : null,
+        !targetUri.includes('authSource=') ? `${targetUri}${sep}authSource=admin` : null,
+        !targetUri.includes('authMechanism=') ? `${targetUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-256` : null,
+        !targetUri.includes('authMechanism=') ? `${targetUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-1` : null,
       ].filter(Boolean);
 
       for (const fallbackUri of fallbacks) {
@@ -106,7 +77,6 @@ const connectDB = async () => {
     isConnecting = false;
     lastDbError = error.message;
     console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    // Schedule background retry after 5s if disconnected
     setTimeout(() => {
       if (mongoose.connection.readyState === 0) {
         console.log('🔄 Retrying MongoDB connection in background...');
@@ -115,8 +85,6 @@ const connectDB = async () => {
     }, 5000);
     throw error;
   }
-
-
 };
 
 // Lifecycle connection listeners
@@ -166,6 +134,3 @@ const checkDbConnection = async (req, res, next) => {
 };
 
 module.exports = { connectDB, checkDbConnection, waitForDbConnection, getLastDbError };
-
-
-
