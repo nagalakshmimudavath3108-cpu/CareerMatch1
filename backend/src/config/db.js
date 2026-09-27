@@ -52,19 +52,25 @@ const connectDB = async () => {
     lastDbError = null;
     return conn;
   } catch (error) {
-    // If auth failed and authSource wasn't explicitly provided, retry with authSource=admin fallback
-    if (error.message.includes('Authentication failed') && baseUri.startsWith('mongodb+srv://') && !baseUri.includes('authSource=')) {
-      try {
-        console.log('🔄 Primary auth attempt failed; retrying connection with authSource=admin...');
-        const sep = baseUri.includes('?') ? '&' : '?';
-        const fallbackUri = `${baseUri}${sep}authSource=admin`;
-        const conn = await tryConnect(fallbackUri);
-        console.log(`✅ MongoDB Connected via fallback: ${conn.connection.host} (Database: ${conn.connection.name})`);
-        isConnecting = false;
-        lastDbError = null;
-        return conn;
-      } catch (fallbackError) {
-        error = fallbackError;
+    if (error.message.includes('Authentication failed') && baseUri.startsWith('mongodb+srv://')) {
+      const sep = baseUri.includes('?') ? '&' : '?';
+      const fallbacks = [
+        !baseUri.includes('authSource=') ? `${baseUri}${sep}authSource=admin` : null,
+        !baseUri.includes('authMechanism=') ? `${baseUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-256` : null,
+        !baseUri.includes('authMechanism=') ? `${baseUri}${sep}authSource=admin&authMechanism=SCRAM-SHA-1` : null,
+      ].filter(Boolean);
+
+      for (const fallbackUri of fallbacks) {
+        try {
+          console.log(`🔄 Retrying connection with fallback parameters...`);
+          const conn = await tryConnect(fallbackUri);
+          console.log(`✅ MongoDB Connected via fallback: ${conn.connection.host} (Database: ${conn.connection.name})`);
+          isConnecting = false;
+          lastDbError = null;
+          return conn;
+        } catch (fbErr) {
+          error = fbErr;
+        }
       }
     }
 
@@ -80,6 +86,7 @@ const connectDB = async () => {
     }, 5000);
     throw error;
   }
+
 
 };
 
