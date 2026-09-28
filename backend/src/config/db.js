@@ -94,6 +94,12 @@ const connectDB = async () => {
 mongoose.connection.on('connected', () => {
   console.log('💚 Mongoose connection established to MongoDB Atlas/Database');
   lastDbError = null;
+  try {
+    const { autoSeedIfEmpty } = require('../seed');
+    autoSeedIfEmpty().catch((err) => console.error('Auto-seed check failed on connect:', err.message));
+  } catch (e) {
+    // Ignore require circularity edge cases
+  }
 });
 
 mongoose.connection.on('error', (err) => {

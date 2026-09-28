@@ -11,24 +11,33 @@ const Message = require('./models/Message');
 const Interview = require('./models/Interview');
 const { calculateJobMatch } = require('./services/matching');
 
-const seedData = async () => {
+const seedData = async (options = {}) => {
+  const { forceClear = false } = options;
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/careermatch';
-    await mongoose.connect(mongoUri);
-    console.log('Connected to MongoDB for Seeding...');
+    if (mongoose.connection.readyState !== 1) {
+      console.warn('⚠️ Cannot seed: MongoDB is not connected.');
+      return;
+    }
 
-    // Clear existing collections
-    await User.deleteMany({});
-    await JobSeekerProfile.deleteMany({});
-    await RecruiterProfile.deleteMany({});
-    await Job.deleteMany({});
-    await Application.deleteMany({});
-    await Notification.deleteMany({});
-    await Conversation.deleteMany({});
-    await Message.deleteMany({});
-    await Interview.deleteMany({});
+    const demoUserExists = await User.exists({ email: 'recruiter@techcorp.com' });
+    if (!forceClear && demoUserExists) {
+      console.log('ℹ️ Demo users already present in database. Skipping auto-seed.');
+      return;
+    }
 
-    console.log('Cleaned old database collections.');
+    if (forceClear) {
+      // Clear existing collections
+      await User.deleteMany({});
+      await JobSeekerProfile.deleteMany({});
+      await RecruiterProfile.deleteMany({});
+      await Job.deleteMany({});
+      await Application.deleteMany({});
+      await Notification.deleteMany({});
+      await Conversation.deleteMany({});
+      await Message.deleteMany({});
+      await Interview.deleteMany({});
+      console.log('Cleaned old database collections.');
+    }
 
     // 1. Create Admin
     const adminUser = await User.create({
@@ -338,12 +347,25 @@ Responsibilities:
     console.log('3. Job Seeker:  alex@example.com / password123');
     console.log('4. Job Seeker:  elena@example.com / password123');
     console.log('-------------------------------\n');
-
-    process.exit(0);
   } catch (error) {
     console.error('Seeding failed:', error);
-    process.exit(1);
+    if (forceClear) process.exit(1);
   }
 };
 
-seedData();
+const autoSeedIfEmpty = async () => {
+  return await seedData({ forceClear: false });
+};
+
+if (require.main === module) {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/careermatch';
+  mongoose.connect(mongoUri)
+    .then(() => seedData({ forceClear: true }))
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Seeding script failed:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = { seedData, autoSeedIfEmpty };

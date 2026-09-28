@@ -3,6 +3,7 @@ require('dotenv').config();
 const { connectDB } = require('./config/db');
 const app = require('./app');
 const { initSocket } = require('./sockets/socket');
+const { autoSeedIfEmpty } = require('./seed');
 
 const PORT = process.env.PORT || 5000;
 
@@ -10,6 +11,7 @@ const startServer = async () => {
   try {
     // Await MongoDB connection before starting HTTP server listener
     await connectDB();
+    await autoSeedIfEmpty();
   } catch (err) {
     console.error('⚠️ MongoDB connection could not be established on boot:', err.message);
     console.error('👉 Make sure MONGODB_URI is set in Render Dashboard and MongoDB Atlas Network Access permits 0.0.0.0/0');
